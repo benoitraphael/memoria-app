@@ -27,11 +27,15 @@ if "api_key" not in st.session_state:
     st.session_state.api_key = ""
 if "generated_chapters" not in st.session_state:
     st.session_state.generated_chapters = {}
-# Ajouter cette variable pour les messages utilisateur
 if "user_message" not in st.session_state:
     st.session_state.user_message = None
+if 'active_expander' not in st.session_state:
+    st.session_state.active_expander = None
+# Ajout d'un dictionnaire pour stocker les messages par chapitre
+if 'chapter_messages' not in st.session_state:
+    st.session_state.chapter_messages = {}
 
-# --- Affichage du message utilisateur (s'il existe) ---
+# --- Affichage du message utilisateur global (si existant) ---
 if st.session_state.user_message:
     msg_type = st.session_state.user_message["type"]
     msg_text = st.session_state.user_message["text"]
@@ -380,6 +384,7 @@ def simple_audio_recorder(chapter_name, text_key):
                     show_text_input_key = f"show_text_input_{normalize_name(chapter_name)}"
                     st.session_state[show_text_input_key] = True
                     st.session_state[f"show_audio_recorder_{recording_key}"] = False
+                    st.session_state.active_expander = f"expander_{normalize_name(chapter_name)}"
                             
                     # Déclencher le rafraîchissement pour afficher le texte dans le bon champ
                     st.rerun()
@@ -495,18 +500,22 @@ def simple_audio_recorder(chapter_name, text_key):
                         if current_content:
                             try:
                                 save_memory(st.session_state.selected_template_name, chapter_name, current_content)
-                                # Stocker le message de succès dans session_state
-                                st.session_state.user_message = {"type": "success", "text": f"Souvenir texte enregistré pour le chapitre '{chapter_name}' !"}
+                                # Stocker le message de succès dans le dictionnaire des messages par chapitre
+                                chapter_key = normalize_name(chapter_name)
+                                st.session_state.chapter_messages[chapter_key] = {"type": "success", "text": f"Souvenir texte enregistré pour le chapitre '{chapter_name}' !"}
                                 st.session_state[content_key] = ""
+                                st.session_state.active_expander = f"expander_{normalize_name(chapter_name)}"
                                 st.rerun()
                             except Exception as e:
-                                # Stocker le message d'erreur dans session_state
-                                st.session_state.user_message = {"type": "error", "text": f"Erreur lors de l'enregistrement du souvenir texte : {e}"}
-                                st.rerun() # Rerun aussi en cas d'erreur pour afficher le message
+                                # Stocker le message d'erreur dans le dictionnaire des messages par chapitre
+                                chapter_key = normalize_name(chapter_name)
+                                st.session_state.chapter_messages[chapter_key] = {"type": "error", "text": f"Erreur lors de l'enregistrement du souvenir texte : {e}"}
+                                st.rerun()
                         else:
-                            # Stocker le message d'avertissement dans session_state
-                            st.session_state.user_message = {"type": "warning", "text": "Le champ souvenir est vide."}
-                            st.rerun() # Rerun pour afficher l'avertissement
+                            # Stocker le message d'avertissement dans le dictionnaire des messages par chapitre
+                            chapter_key = normalize_name(chapter_name)
+                            st.session_state.chapter_messages[chapter_key] = {"type": "warning", "text": "Le champ souvenir est vide."}
+                            st.rerun()
 
                 with cancel_col:
                     if st.button("Annuler", key=f"cancel_text_{normalize_name(chapter_name)}"):
@@ -559,6 +568,7 @@ def simple_audio_recorder(chapter_name, text_key):
                             show_text_input_key = f"show_text_input_{normalize_name(chapter_name)}"
                             st.session_state[show_text_input_key] = True
                             st.session_state[show_audio_recorder_key] = False
+                            st.session_state.active_expander = f"expander_{normalize_name(chapter_name)}"
                             
                             # Déclencher le rafraîchissement pour afficher le texte dans le bon champ
                             st.rerun()
@@ -650,17 +660,34 @@ def simple_audio_recorder(chapter_name, text_key):
                             if save_success:
                                 # Mettre à jour l'état de session pour affichage immédiat
                                 st.session_state.generated_chapters[normalize_name(chapter_name)] = generated_text
-                                st.success(f"Chapitre '{chapter_name}' généré et sauvegardé ! {save_message}")
+                                # Stocker le message de succès dans le dictionnaire des messages par chapitre
+                                chapter_key = normalize_name(chapter_name)
+                                st.session_state.chapter_messages[chapter_key] = {"type": "success", "text": f"Chapitre '{chapter_name}' généré et sauvegardé ! {save_message}"}
+                                st.session_state.active_expander = f"expander_{normalize_name(chapter_name)}"
                                 st.rerun() # Recharger pour afficher
                             else:
-                                st.error(f"Erreur lors de la sauvegarde du chapitre généré: {save_message}")
+                                # Stocker le message d'erreur dans le dictionnaire des messages par chapitre
+                                chapter_key = normalize_name(chapter_name)
+                                st.session_state.chapter_messages[chapter_key] = {"type": "error", "text": f"Erreur lors de la sauvegarde du chapitre généré: {save_message}"}
+                                st.session_state.active_expander = f"expander_{normalize_name(chapter_name)}"
+                                st.rerun() # Recharger pour afficher l'erreur
                         else:
                             # Afficher l'erreur retournée par la fonction de génération
-                            st.error(f"La génération du chapitre a échoué : {generated_text}")
+                            # Stocker le message d'erreur dans le dictionnaire des messages par chapitre
+                            chapter_key = normalize_name(chapter_name)
+                            st.session_state.chapter_messages[chapter_key] = {"type": "error", "text": f"La génération du chapitre a échoué : {generated_text}"}
+                            st.session_state.active_expander = f"expander_{normalize_name(chapter_name)}"
+                            st.rerun() # Recharger pour afficher l'erreur
                 else:
                      st.warning("Ajoutez au moins un souvenir avant de générer.")
+                     st.session_state.active_expander = f"expander_{normalize_name(chapter_name)}"
+                     st.rerun() # Optionnel: forcer le rerun pour ouvrir l'expander si on clique générer sans souvenirs
+
             elif not memories:
-                st.caption("Ajoutez des souvenirs pour pouvoir générer ce chapitre.")
+                # Si aucun souvenir, on ne fait rien mais on reste sur le même expander
+                st.caption("Ajoutez des souvenirs pour pouvoir générer ce chapitre.") # Remettre le caption
+                st.session_state.active_expander = f"expander_{normalize_name(chapter_name)}"
+                st.rerun() # Optionnel: forcer le rerun pour ouvrir l'expander si on clique générer sans souvenirs
 
             # Afficher le chapitre généré (s'il existe dans l'état de session ou fichier)
             display_content = st.session_state.generated_chapters.get(normalize_name(chapter_name), generated_content)
@@ -882,9 +909,24 @@ if st.session_state.chapters:
     for chapter in st.session_state.chapters:
         # Clé unique pour l'expander basée sur le chapitre normalisé
         expander_key = f"expander_{normalize_name(chapter)}"
+        chapter_key = normalize_name(chapter)
         
-        with st.expander(f"Chapitre : {chapter}", expanded=False):
+        with st.expander(f"Chapitre : {chapter}", expanded=(expander_key == st.session_state.get('active_expander'))):
             st.markdown(f"### Gérer le chapitre : {chapter}")
+            
+            # Afficher les messages spécifiques à ce chapitre, s'il y en a
+            if chapter_key in st.session_state.chapter_messages:
+                msg = st.session_state.chapter_messages[chapter_key]
+                if msg["type"] == "success":
+                    st.success(msg["text"])
+                elif msg["type"] == "error":
+                    st.error(msg["text"])
+                elif msg["type"] == "warning":
+                    st.warning(msg["text"])
+                elif msg["type"] == "info":
+                    st.info(msg["text"])
+                # Effacer le message après l'avoir affiché
+                del st.session_state.chapter_messages[chapter_key]
             
             # --- Affichage des souvenirs existants ---
             st.markdown("**Souvenirs enregistrés :**")
@@ -914,7 +956,7 @@ if st.session_state.chapters:
             add_audio_key = f"add_audio_{normalize_name(chapter)}"
             show_text_input_key = f"show_text_input_{normalize_name(chapter)}"
             new_memory_text_key = f"new_memory_text_{normalize_name(chapter)}"
-            show_audio_recorder_key = f"show_audio_recorder_{normalize_name(chapter)}"
+            show_audio_recorder_key = f"show_audio_recorder_{expander_key}"
             transcribed_text_key = f"transcribed_text_{normalize_name(chapter)}"
 
             # Initialiser les états si nécessaire
@@ -967,18 +1009,22 @@ if st.session_state.chapters:
                         if current_content:
                             try:
                                 save_memory(st.session_state.selected_template_name, chapter, current_content)
-                                # Stocker le message de succès dans session_state
-                                st.session_state.user_message = {"type": "success", "text": f"Souvenir texte enregistré pour le chapitre '{chapter}' !"}
+                                # Stocker le message de succès dans le dictionnaire des messages par chapitre
+                                chapter_key = normalize_name(chapter)
+                                st.session_state.chapter_messages[chapter_key] = {"type": "success", "text": f"Souvenir texte enregistré pour le chapitre '{chapter}' !"}
                                 st.session_state[content_key] = ""
+                                st.session_state.active_expander = expander_key
                                 st.rerun()
                             except Exception as e:
-                                # Stocker le message d'erreur dans session_state
-                                st.session_state.user_message = {"type": "error", "text": f"Erreur lors de l'enregistrement du souvenir texte : {e}"}
-                                st.rerun() # Rerun aussi en cas d'erreur pour afficher le message
+                                # Stocker le message d'erreur dans le dictionnaire des messages par chapitre
+                                chapter_key = normalize_name(chapter)
+                                st.session_state.chapter_messages[chapter_key] = {"type": "error", "text": f"Erreur lors de l'enregistrement du souvenir texte : {e}"}
+                                st.rerun()
                         else:
-                            # Stocker le message d'avertissement dans session_state
-                            st.session_state.user_message = {"type": "warning", "text": "Le champ souvenir est vide."}
-                            st.rerun() # Rerun pour afficher l'avertissement
+                            # Stocker le message d'avertissement dans le dictionnaire des messages par chapitre
+                            chapter_key = normalize_name(chapter)
+                            st.session_state.chapter_messages[chapter_key] = {"type": "warning", "text": "Le champ souvenir est vide."}
+                            st.rerun()
 
                 with cancel_col:
                     if st.button("Annuler", key=f"cancel_text_{normalize_name(chapter)}"):
@@ -1031,6 +1077,7 @@ if st.session_state.chapters:
                             show_text_input_key = f"show_text_input_{normalize_name(chapter)}"
                             st.session_state[show_text_input_key] = True
                             st.session_state[show_audio_recorder_key] = False
+                            st.session_state.active_expander = expander_key
                             
                             # Déclencher le rafraîchissement pour afficher le texte dans le bon champ
                             st.rerun()
@@ -1122,17 +1169,34 @@ if st.session_state.chapters:
                             if save_success:
                                 # Mettre à jour l'état de session pour affichage immédiat
                                 st.session_state.generated_chapters[normalize_name(chapter)] = generated_text
-                                st.success(f"Chapitre '{chapter}' généré et sauvegardé ! {save_message}")
+                                # Stocker le message de succès dans le dictionnaire des messages par chapitre
+                                chapter_key = normalize_name(chapter)
+                                st.session_state.chapter_messages[chapter_key] = {"type": "success", "text": f"Chapitre '{chapter}' généré et sauvegardé ! {save_message}"}
+                                st.session_state.active_expander = expander_key
                                 st.rerun() # Recharger pour afficher
                             else:
-                                st.error(f"Erreur lors de la sauvegarde du chapitre généré: {save_message}")
+                                # Stocker le message d'erreur dans le dictionnaire des messages par chapitre
+                                chapter_key = normalize_name(chapter)
+                                st.session_state.chapter_messages[chapter_key] = {"type": "error", "text": f"Erreur lors de la sauvegarde du chapitre généré: {save_message}"}
+                                st.session_state.active_expander = expander_key
+                                st.rerun() # Recharger pour afficher l'erreur
                         else:
                             # Afficher l'erreur retournée par la fonction de génération
-                            st.error(f"La génération du chapitre a échoué : {generated_text}")
+                            # Stocker le message d'erreur dans le dictionnaire des messages par chapitre
+                            chapter_key = normalize_name(chapter)
+                            st.session_state.chapter_messages[chapter_key] = {"type": "error", "text": f"La génération du chapitre a échoué : {generated_text}"}
+                            st.session_state.active_expander = expander_key
+                            st.rerun() # Recharger pour afficher l'erreur
                 else:
                      st.warning("Ajoutez au moins un souvenir avant de générer.")
+                     if st.session_state.get('active_expander') != expander_key:
+                          st.session_state.active_expander = expander_key
+
             elif not memories:
-                st.caption("Ajoutez des souvenirs pour pouvoir générer ce chapitre.")
+                # Si aucun souvenir, on ne fait rien mais on reste sur le même expander
+                st.caption("Ajoutez des souvenirs pour pouvoir générer ce chapitre.") # Remettre le caption
+                if st.session_state.get('active_expander') != expander_key:
+                     st.session_state.active_expander = expander_key
 
             # Afficher le chapitre généré (s'il existe dans l'état de session ou fichier)
             display_content = st.session_state.generated_chapters.get(normalize_name(chapter), generated_content)
