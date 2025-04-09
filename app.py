@@ -5,6 +5,8 @@ import time
 import uuid
 import datetime
 import re
+import openai
+from pathlib import Path
 import numpy as np
 import tempfile
 import io
