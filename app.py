@@ -11,6 +11,13 @@ import numpy as np
 import tempfile
 import io
 
+# --- Configuration de la page (DOIT ÊTRE LA PREMIÈRE COMMANDE STREAMLIT) ---
+st.set_page_config(
+    page_title="MemorIA - Votre atelier d'écriture personnel",
+    page_icon="📝",
+    layout="wide"
+)
+
 # --- Initialisation des variables de session ---
 if "selected_template_name" not in st.session_state:
     st.session_state.selected_template_name = None
@@ -20,6 +27,24 @@ if "api_key" not in st.session_state:
     st.session_state.api_key = ""
 if "generated_chapters" not in st.session_state:
     st.session_state.generated_chapters = {}
+# Ajouter cette variable pour les messages utilisateur
+if "user_message" not in st.session_state:
+    st.session_state.user_message = None
+
+# --- Affichage du message utilisateur (s'il existe) ---
+if st.session_state.user_message:
+    msg_type = st.session_state.user_message["type"]
+    msg_text = st.session_state.user_message["text"]
+    if msg_type == "success":
+        st.success(msg_text)
+    elif msg_type == "error":
+        st.error(msg_text)
+    elif msg_type == "warning":
+        st.warning(msg_text)
+    elif msg_type == "info":
+        st.info(msg_text)
+    # Effacer le message pour qu'il ne s'affiche qu'une fois
+    st.session_state.user_message = None
 
 # --- Fonctions d'utilitaires ---
 def normalize_name(name):
@@ -330,51 +355,328 @@ def simple_audio_recorder(chapter_name, text_key):
             
             # Effectuer la transcription
             with st.spinner("Transcription en cours..."):
-                transcription = None
-                if st.session_state.get(f"audio_bytes_{recording_key}"):
-                    try:
-                        # Initialiser le client OpenAI avec la clé API
-                        client = openai.OpenAI(api_key=api_key)
+                try:
+                    # Initialiser le client OpenAI avec la clé API
+                    client = openai.OpenAI(api_key=api_key)
+                    
+                    # Créer un objet fichier-en-mémoire à partir des bytes audio
+                    audio_bio = io.BytesIO(st.session_state[f"audio_bytes_{recording_key}"])
+                    # IMPORTANT: Donner un nom à ce fichier virtuel, requis par OpenAI
+                    audio_bio.name = "audio.wav" 
+                    
+                    # Appel à l'API Whisper en passant l'objet BytesIO directement
+                    transcription = client.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=audio_bio, # Passer l'objet BytesIO
+                        language="fr",
+                        response_format="text"
+                    )
                         
-                        # Créer un objet fichier-en-mémoire à partir des bytes audio
-                        audio_bio = io.BytesIO(st.session_state[f"audio_bytes_{recording_key}"])
-                        # IMPORTANT: Donner un nom à ce fichier virtuel, requis par OpenAI
-                        audio_bio.name = "audio.wav" 
-                        
-                        # Appel à l'API Whisper en passant l'objet BytesIO directement
-                        transcription = client.audio.transcriptions.create(
-                            model="whisper-1",
-                            file=audio_bio, # Passer l'objet BytesIO
-                            language="fr",
-                            response_format="text"
-                        )
+                    # Stocker la transcription dans l'état de session
+                    content_key = f"new_memory_content_{normalize_name(chapter_name)}"
+                    st.session_state[content_key] = transcription
+
+                    # Afficher l'interface texte et masquer l'interface audio
+                    show_text_input_key = f"show_text_input_{normalize_name(chapter_name)}"
+                    st.session_state[show_text_input_key] = True
+                    st.session_state[f"show_audio_recorder_{recording_key}"] = False
                             
-                        # Stocker la transcription dans l'état de session
-                        st.session_state[text_key] = transcription
-                    except Exception as e:
-                        st.error(f"Erreur lors de la transcription : {str(e)}")
-                        st.session_state[text_key] = "Erreur de transcription. Veuillez réessayer."
+                    # Déclencher le rafraîchissement pour afficher le texte dans le bon champ
+                    st.rerun()
+                                
+                except Exception as e:
+                    st.error(f"Erreur lors de la transcription : {str(e)}")
+                    # Optionnel: on pourrait aussi stocker l'erreur via user_message
+                    # st.session_state.user_message = {"type": "error", "text": f"Erreur transcription: {e}"}
+                    # st.rerun()
+
+                # --- SUPPRIMER TOUTE LA SECTION SUIVANTE --- 
+                # (Affichage de la zone de texte spécifique à l'audio et son bouton)
+                # transcribed_text = st.text_area(
+                #     "Texte transcrit (éditable) :", 
+                #     value=st.session_state.get(transcribed_text_key, ""),
+                #     height=150,
+                #     key=f"transcribed_display_{normalize_name(chapter_name)}"
+                # )
+
+                # if st.button("💾 Enregistrer le Souvenir (audio)", key=f"save_audio_{normalize_name(chapter_name)}"):
+                #     if transcribed_text.strip():
+                #         try:
+                #             # Lire le texte potentiellement édité
+                #             edited_text = st.session_state[f"transcribed_display_{normalize_name(chapter_name)}"]
+                #             save_memory(st.session_state.selected_template_name, chapter_name, edited_text)
+                #             st.success(f"Souvenir (issu de l'audio) sauvegardé pour le chapitre '{chapter_name}' !")
+                #             # Réinitialiser et cacher
+                #             st.session_state[f"show_audio_recorder_{recording_key}"] = False
+                #             st.session_state[transcribed_text_key] = ""
+                #             st.rerun()
+                #         except Exception as e:
+                #              st.error(f"Erreur sauvegarde audio: {e}")
+                #     else:
+                #         st.warning("Le champ transcrit est vide.")
+
+            # Affichage des souvenirs existants pour le chapitre
+            # memories = load_memories(chapter_name)
+            # if memories:
+            #     for i, memory in enumerate(memories):
+            #         # Ne PAS utiliser d'expander ici pour éviter l'imbrication
+            #         st.markdown(f"- **{memory['filename']}**") # Afficher le nom du fichier
+            #         # Afficher le contenu directement en dessous
+            #         st.text_area(
+            #             f"Contenu_{memory['filename']}", 
+            #             value=memory['content'], 
+            #             height=100, 
+            #             disabled=True, # Rendre non éditable ici
+            #             label_visibility="collapsed" # Cacher le label par défaut
+            #         ) 
+            #         # Ajouter un petit séparateur
+            #         st.divider()
+            # else:
+            #     st.caption("Aucun souvenir enregistré pour ce chapitre.")
+            
+            st.markdown("--- ")
+            
+            # --- Ajout d'un nouveau souvenir --- 
+            st.markdown("**Ajouter un nouveau souvenir :**")
+            add_text_key = f"add_text_{normalize_name(chapter_name)}"
+            add_audio_key = f"add_audio_{normalize_name(chapter_name)}"
+            show_text_input_key = f"show_text_input_{normalize_name(chapter_name)}"
+            new_memory_text_key = f"new_memory_text_{normalize_name(chapter_name)}"
+            show_audio_recorder_key = f"show_audio_recorder_{recording_key}"
+            transcribed_text_key = f"transcribed_text_{normalize_name(chapter_name)}"
+
+            # Initialiser les états si nécessaire
+            if show_text_input_key not in st.session_state:
+                st.session_state[show_text_input_key] = False
+            if show_audio_recorder_key not in st.session_state:
+                st.session_state[show_audio_recorder_key] = False
+            if transcribed_text_key not in st.session_state:
+                st.session_state[transcribed_text_key] = ""
+
+            # Boutons pour choisir le mode d'ajout
+            col1, col2, _ = st.columns([1,1,3])
+            with col1:
+                if st.button("💬 Ajouter via Texte", key=add_text_key):
+                    st.session_state[show_text_input_key] = True
+                    st.session_state[show_audio_recorder_key] = False # Assurer l'exclusivité
+                    st.rerun()
+            with col2:
+                 if st.button("🎙️ Ajouter via Audio", key=add_audio_key):
+                    st.session_state[show_audio_recorder_key] = True
+                    st.session_state[show_text_input_key] = False # Assurer l'exclusivité
+                    st.rerun()
+
+            # --- Interface d'ajout Texte ---
+            if st.session_state.get(show_text_input_key, False):
+                st.markdown("#### Nouveau Souvenir Texte")
+                widget_key = f"new_memory_text_widget_{normalize_name(chapter_name)}"
+                content_key = f"new_memory_content_{normalize_name(chapter_name)}"
+
+                if content_key not in st.session_state:
+                    st.session_state[content_key] = ""
+
+                def update_text_content(widget_session_key, content_session_key):
+                    """Met à jour la variable de session contenant le texte lorsque l'utilisateur tape."""
+                    st.session_state[content_session_key] = st.session_state[widget_session_key]
+
+                st.text_area(
+                    "Racontez votre souvenir ici :",
+                    height=150,
+                    value=st.session_state[content_key], 
+                    key=widget_key, 
+                    on_change=update_text_content, 
+                    args=(widget_key, content_key) 
+                )
+
+                save_col, cancel_col = st.columns(2)
+                with save_col:
+                    if st.button("💾 Enregistrer ce Souvenir", key=f"save_new_text_{normalize_name(chapter_name)}"):
+                        current_content = st.session_state.get(content_key, "").strip()
+                        if current_content:
+                            try:
+                                save_memory(st.session_state.selected_template_name, chapter_name, current_content)
+                                # Stocker le message de succès dans session_state
+                                st.session_state.user_message = {"type": "success", "text": f"Souvenir texte enregistré pour le chapitre '{chapter_name}' !"}
+                                st.session_state[content_key] = ""
+                                st.rerun()
+                            except Exception as e:
+                                # Stocker le message d'erreur dans session_state
+                                st.session_state.user_message = {"type": "error", "text": f"Erreur lors de l'enregistrement du souvenir texte : {e}"}
+                                st.rerun() # Rerun aussi en cas d'erreur pour afficher le message
+                        else:
+                            # Stocker le message d'avertissement dans session_state
+                            st.session_state.user_message = {"type": "warning", "text": "Le champ souvenir est vide."}
+                            st.rerun() # Rerun pour afficher l'avertissement
+
+                with cancel_col:
+                    if st.button("Annuler", key=f"cancel_text_{normalize_name(chapter_name)}"):
+                        st.session_state[show_text_input_key] = False
+                        st.session_state[content_key] = ""
+                        st.rerun()
+
+            # --- Interface d'ajout Audio --- 
+            if st.session_state.get(show_audio_recorder_key, False):
+                st.markdown("#### Nouveau Souvenir Audio")
+                st.info("Cliquez sur l'icône micro pour enregistrer, puis validez l'enregistrement.")
+
+                # Utiliser le composant audio_input comme dans le tutoriel
+                audio_data = st.audio_input(
+                    label="Enregistrez votre souvenir ici :", 
+                    key=f"audio_input_{normalize_name(chapter_name)}"
+                )
                 
-                # Réinitialiser l'état
-                st.session_state[f"transcribing_{recording_key}"] = False
-                # Forcer la mise à jour de l'interface
-                st.rerun()
-    
-    with col2:
-        # Indicateur d'enregistrement
-        if state["is_recording"]:
-            st.error("⚠️ Enregistrement en cours... Cliquez sur ✓ quand vous avez terminé")
-        elif st.session_state.get(f"transcribing_{recording_key}", False):
-            st.info("⏳ Transcription en cours...")
-    
-    # Composant WebRTC caché pour capturer l'audio
-    if state["is_recording"]:
-        audio_bytes = st.audio_recorder(
-            pause_threshold=2.0,  # Pause après 2 secondes de silence
-            key=f"audio_recorder_{normalize_name(chapter_name)}"
-        )
-        if audio_bytes:
-            st.session_state[f"audio_bytes_{recording_key}"] = audio_bytes
+                # Si l'audio a été enregistré OU uploadé (audio_data contient des données)
+                if audio_data:
+                    audio_bytes = audio_data.read() # Lire les bytes depuis l'objet retourné
+                    
+                    # Afficher le lecteur audio pour réécouter (facultatif mais utile)
+                    st.audio(audio_bytes, format="audio/wav") # Assumer WAV pour l'instant
+                    
+                    # Préparation pour la transcription (méthode directe)
+                    with st.spinner("Transcription en cours..."):
+                        try:
+                            # Initialiser le client OpenAI avec la clé API
+                            client = openai.OpenAI(api_key=api_key)
+                            
+                            # Créer un objet fichier-en-mémoire à partir des bytes audio
+                            audio_bio = io.BytesIO(audio_bytes)
+                            # IMPORTANT: Donner un nom à ce fichier virtuel, requis par OpenAI
+                            audio_bio.name = "audio.wav" 
+                            
+                            # Appel à l'API Whisper en passant l'objet BytesIO directement
+                            transcription = client.audio.transcriptions.create(
+                                model="whisper-1",
+                                file=audio_bio, # Passer l'objet BytesIO
+                                language="fr",
+                                response_format="text"
+                            )
+                                
+                            # Stocker la transcription dans l'état de session
+                            content_key = f"new_memory_content_{normalize_name(chapter_name)}"
+                            st.session_state[content_key] = transcription
+
+                            # Afficher l'interface texte et masquer l'interface audio
+                            show_text_input_key = f"show_text_input_{normalize_name(chapter_name)}"
+                            st.session_state[show_text_input_key] = True
+                            st.session_state[show_audio_recorder_key] = False
+                            
+                            # Déclencher le rafraîchissement pour afficher le texte dans le bon champ
+                            st.rerun()
+                                
+                        except Exception as e:
+                            st.error(f"Erreur lors de la transcription : {str(e)}")
+                            # Optionnel: on pourrait aussi stocker l'erreur via user_message
+                            # st.session_state.user_message = {"type": "error", "text": f"Erreur transcription: {e}"}
+                            # st.rerun()
+
+                # --- SUPPRIMER TOUTE LA SECTION SUIVANTE --- 
+                # (Affichage de la zone de texte spécifique à l'audio et son bouton)
+                # transcribed_text = st.text_area(
+                #     "Texte transcrit (éditable) :", 
+                #     value=st.session_state.get(transcribed_text_key, ""),
+                #     height=150,
+                #     key=f"transcribed_display_{normalize_name(chapter_name)}"
+                # )
+
+                # if st.button("💾 Enregistrer le Souvenir (audio)", key=f"save_audio_{normalize_name(chapter_name)}"):
+                #     if transcribed_text.strip():
+                #         try:
+                #             # Lire le texte potentiellement édité
+                #             edited_text = st.session_state[f"transcribed_display_{normalize_name(chapter_name)}"]
+                #             save_memory(st.session_state.selected_template_name, chapter_name, edited_text)
+                #             st.success(f"Souvenir (issu de l'audio) sauvegardé pour le chapitre '{chapter_name}' !")
+                #             # Réinitialiser et cacher
+                #             st.session_state[show_audio_recorder_key] = False
+                #             st.session_state[transcribed_text_key] = ""
+                #             st.rerun()
+                #         except Exception as e:
+                #              st.error(f"Erreur sauvegarde audio: {e}")
+                #     else:
+                #         st.warning("Le champ transcrit est vide.")
+
+            # Suppression de l'ancienne section 'souvenir rapide'
+            # temp_memory_text = st.text_area("Écrire un souvenir rapide :", key=f"temp_text_{normalize_name(chapter_name)}")
+            # if st.button(f"💾 Sauvegarder souvenir rapide pour '{chapter_name}'", key=f"save_temp_{normalize_name(chapter_name)}"):
+            #     if temp_memory_text.strip():
+            #         # Utilisation de la fonction save_memory mise à jour
+            #         success, message, file_path = save_memory(st.session_state.selected_template_name, chapter_name, temp_memory_text)
+            #         if success:
+            #             st.success(message)
+            #             # Effacer le champ après sauvegarde et rafraîchir
+            #             st.session_state[f"temp_text_{normalize_name(chapter_name)}"] = ""
+            #             st.rerun()
+            #         else:
+            #             st.error(f"Erreur sauvegarde : {message}")
+            #     else:
+            #         st.warning("Le champ souvenir est vide.")
+            
+            st.markdown("--- ")
+            
+            # --- Génération du chapitre --- 
+            st.markdown("**Générer le chapitre :**")
+            chapter_filename = normalize_name(chapter_name) + ".md"
+            chapter_path = os.path.join(os.getcwd(), "chapitres", normalize_name(st.session_state.selected_template_name), chapter_filename)
+            
+            # Charger le chapitre généré s'il existe déjà
+            generated_content = None
+            if os.path.exists(chapter_path):
+                try:
+                    with open(chapter_path, 'r', encoding='utf-8') as f:
+                        generated_content = f.read()
+                except Exception as e:
+                    st.warning(f"Impossible de lire le chapitre généré: {e}")
+
+            # Bouton pour générer
+            if st.button(f"✨ Générer le chapitre '{chapter_name}'", key=f"generate_{normalize_name(chapter_name)}", disabled=not memories):
+                if memories:
+                    with st.spinner("🧠 L'IA réfléchit et rédige..."): 
+                        # Appel réel à la fonction de génération
+                        generated_text = generate_chapter_with_ai(
+                            st.session_state.api_key, 
+                            st.session_state.selected_template_name, 
+                            chapter_name, 
+                            memories
+                        )
+                        
+                        # Vérifier si la génération a réussi
+                        if generated_text and not generated_text.startswith("Erreur"):
+                            # Sauvegarder le chapitre généré
+                            save_success, save_message, _ = save_chapter(
+                                st.session_state.selected_template_name, 
+                                chapter_name, 
+                                generated_text
+                            )
+                            
+                            if save_success:
+                                # Mettre à jour l'état de session pour affichage immédiat
+                                st.session_state.generated_chapters[normalize_name(chapter_name)] = generated_text
+                                st.success(f"Chapitre '{chapter_name}' généré et sauvegardé ! {save_message}")
+                                st.rerun() # Recharger pour afficher
+                            else:
+                                st.error(f"Erreur lors de la sauvegarde du chapitre généré: {save_message}")
+                        else:
+                            # Afficher l'erreur retournée par la fonction de génération
+                            st.error(f"La génération du chapitre a échoué : {generated_text}")
+                else:
+                     st.warning("Ajoutez au moins un souvenir avant de générer.")
+            elif not memories:
+                st.caption("Ajoutez des souvenirs pour pouvoir générer ce chapitre.")
+
+            # Afficher le chapitre généré (s'il existe dans l'état de session ou fichier)
+            display_content = st.session_state.generated_chapters.get(normalize_name(chapter_name), generated_content)
+            if display_content:
+                st.markdown("**Texte généré :**")
+                st.markdown(display_content)
+            
+
+# --- Export (à placer en dehors de la boucle des chapitres) ---
+st.sidebar.markdown("---")
+st.sidebar.header("Exporter votre livre")
+# Placeholder pour le bouton d'export
+st.sidebar.button("Exporter le livre complet (.md)", key="export_book_button", disabled=True) # Désactivé pour l'instant
+
+# --- Nettoyage/Footer ---
+# (Peut contenir des infos de version, liens, etc.)
 
 # --- Fonctions pour la génération de chapitre avec IA --- 
 
@@ -497,11 +799,11 @@ def load_chapter(template_name, chapter):
         return None
 
 # --- Interface Utilisateur Streamlit ---
-st.set_page_config(
-    page_title="MemorIA - Votre atelier d'écriture personnel",
-    page_icon="📝",
-    layout="wide"
-)
+# st.set_page_config(   <-- Supprimer l'ancien appel ici
+#     page_title="MemorIA - Votre atelier d'écriture personnel",
+#     page_icon="📝",
+#     layout="wide"
+# )
 
 # --- Barre latérale ---
 with st.sidebar:
@@ -639,35 +941,49 @@ if st.session_state.chapters:
             # --- Interface d'ajout Texte ---
             if st.session_state.get(show_text_input_key, False):
                 st.markdown("#### Nouveau Souvenir Texte")
-                new_memory_text = st.text_area(
-                    "Racontez votre souvenir ici :", 
-                    height=150, 
-                    key=new_memory_text_key
+                widget_key = f"new_memory_text_widget_{normalize_name(chapter)}"
+                content_key = f"new_memory_content_{normalize_name(chapter)}"
+
+                if content_key not in st.session_state:
+                    st.session_state[content_key] = ""
+
+                def update_text_content(widget_session_key, content_session_key):
+                    """Met à jour la variable de session contenant le texte lorsque l'utilisateur tape."""
+                    st.session_state[content_session_key] = st.session_state[widget_session_key]
+
+                st.text_area(
+                    "Racontez votre souvenir ici :",
+                    height=150,
+                    value=st.session_state[content_key], 
+                    key=widget_key, 
+                    on_change=update_text_content, 
+                    args=(widget_key, content_key) 
                 )
-                
+
                 save_col, cancel_col = st.columns(2)
                 with save_col:
                     if st.button("💾 Enregistrer ce Souvenir", key=f"save_new_text_{normalize_name(chapter)}"):
-                        if new_memory_text.strip():
-                            success, message, file_path = save_memory(
-                                st.session_state.selected_template_name, 
-                                chapter, 
-                                new_memory_text
-                            )
-                            if success:
-                                st.success(message)
-                                st.session_state[show_text_input_key] = False # Cacher après succès
-                                st.session_state[new_memory_text_key] = "" # Vider le champ
+                        current_content = st.session_state.get(content_key, "").strip()
+                        if current_content:
+                            try:
+                                save_memory(st.session_state.selected_template_name, chapter, current_content)
+                                # Stocker le message de succès dans session_state
+                                st.session_state.user_message = {"type": "success", "text": f"Souvenir texte enregistré pour le chapitre '{chapter}' !"}
+                                st.session_state[content_key] = ""
                                 st.rerun()
-                            else:
-                                st.error(f"Erreur sauvegarde : {message}")
+                            except Exception as e:
+                                # Stocker le message d'erreur dans session_state
+                                st.session_state.user_message = {"type": "error", "text": f"Erreur lors de l'enregistrement du souvenir texte : {e}"}
+                                st.rerun() # Rerun aussi en cas d'erreur pour afficher le message
                         else:
-                            st.warning("Le champ souvenir est vide.")
-                
+                            # Stocker le message d'avertissement dans session_state
+                            st.session_state.user_message = {"type": "warning", "text": "Le champ souvenir est vide."}
+                            st.rerun() # Rerun pour afficher l'avertissement
+
                 with cancel_col:
                     if st.button("Annuler", key=f"cancel_text_{normalize_name(chapter)}"):
                         st.session_state[show_text_input_key] = False
-                        st.session_state[new_memory_text_key] = "" # Vider aussi en cas d'annulation
+                        st.session_state[content_key] = ""
                         st.rerun()
 
             # --- Interface d'ajout Audio --- 
@@ -692,7 +1008,7 @@ if st.session_state.chapters:
                     with st.spinner("Transcription en cours..."):
                         try:
                             # Initialiser le client OpenAI avec la clé API
-                            client = openai.OpenAI(api_key=st.session_state.api_key)
+                            client = openai.OpenAI(api_key=api_key)
                             
                             # Créer un objet fichier-en-mémoire à partir des bytes audio
                             audio_bio = io.BytesIO(audio_bytes)
@@ -708,49 +1024,47 @@ if st.session_state.chapters:
                             )
                                 
                             # Stocker la transcription dans l'état de session
-                            st.session_state[transcribed_text_key] = transcription
+                            content_key = f"new_memory_content_{normalize_name(chapter)}"
+                            st.session_state[content_key] = transcription
+
+                            # Afficher l'interface texte et masquer l'interface audio
+                            show_text_input_key = f"show_text_input_{normalize_name(chapter)}"
+                            st.session_state[show_text_input_key] = True
+                            st.session_state[show_audio_recorder_key] = False
+                            
+                            # Déclencher le rafraîchissement pour afficher le texte dans le bon champ
+                            st.rerun()
                                 
                         except Exception as e:
                             st.error(f"Erreur lors de la transcription : {str(e)}")
-                            st.session_state[transcribed_text_key] = "Erreur de transcription. Veuillez réessayer."
+                            # Optionnel: on pourrait aussi stocker l'erreur via user_message
+                            # st.session_state.user_message = {"type": "error", "text": f"Erreur transcription: {e}"}
+                            # st.rerun()
 
-                # Afficher le texte transcrit et permettre la sauvegarde
-                transcribed_text = st.text_area(
-                    "Texte transcrit (éditable) :", 
-                    value=st.session_state.get(transcribed_text_key, ""),
-                    height=150,
-                    key=f"transcribed_display_{normalize_name(chapter)}"
-                )
-                
-                # Mettre à jour l'état de session si l'utilisateur modifie le texte
-                if transcribed_text != st.session_state.get(transcribed_text_key, ""):
-                    st.session_state[transcribed_text_key] = transcribed_text
+                # --- SUPPRIMER TOUTE LA SECTION SUIVANTE --- 
+                # (Affichage de la zone de texte spécifique à l'audio et son bouton)
+                # transcribed_text = st.text_area(
+                #     "Texte transcrit (éditable) :", 
+                #     value=st.session_state.get(transcribed_text_key, ""),
+                #     height=150,
+                #     key=f"transcribed_display_{normalize_name(chapter)}"
+                # )
 
-                save_audio_col, cancel_audio_col = st.columns(2)
-                with save_audio_col:
-                    if st.button("💾 Enregistrer ce Souvenir (Audio)", key=f"save_new_audio_{normalize_name(chapter)}", disabled=not st.session_state.get(transcribed_text_key, "")):
-                        if st.session_state[transcribed_text_key].strip():
-                            success, message, _ = save_memory(
-                                st.session_state.selected_template_name, 
-                                chapter, 
-                                st.session_state[transcribed_text_key] # Sauvegarder le texte édité
-                            )
-                            if success:
-                                st.success(f"Souvenir (issu de l'audio) sauvegardé : {message}")
-                                st.session_state[show_audio_recorder_key] = False # Cacher après succès
-                                st.session_state[transcribed_text_key] = "" # Vider la transcription
-                                st.rerun()
-                            else:
-                                st.error(f"Erreur sauvegarde : {message}")
-                        else:
-                            st.warning("Le champ de transcription est vide.")
-                            
-                with cancel_audio_col:
-                     if st.button("Annuler (Audio)", key=f"cancel_audio_{normalize_name(chapter)}"):
-                        st.session_state[show_audio_recorder_key] = False
-                        st.session_state[transcribed_text_key] = "" # Vider aussi en cas d'annulation
-                        st.rerun()
-
+                # if st.button("💾 Enregistrer le Souvenir (audio)", key=f"save_audio_{normalize_name(chapter)}"):
+                #     if transcribed_text.strip():
+                #         try:
+                #             # Lire le texte potentiellement édité
+                #             edited_text = st.session_state[f"transcribed_display_{normalize_name(chapter)}"]
+                #             save_memory(st.session_state.selected_template_name, chapter, edited_text)
+                #             st.success(f"Souvenir (issu de l'audio) sauvegardé pour le chapitre '{chapter}' !")
+                #             # Réinitialiser et cacher
+                #             st.session_state[show_audio_recorder_key] = False
+                #             st.session_state[transcribed_text_key] = ""
+                #             st.rerun()
+                #         except Exception as e:
+                #              st.error(f"Erreur sauvegarde audio: {e}")
+                #     else:
+                #         st.warning("Le champ transcrit est vide.")
 
             # Suppression de l'ancienne section 'souvenir rapide'
             # temp_memory_text = st.text_area("Écrire un souvenir rapide :", key=f"temp_text_{normalize_name(chapter)}")
@@ -826,14 +1140,9 @@ if st.session_state.chapters:
                 st.markdown("**Texte généré :**")
                 st.markdown(display_content)
             
-else:
-    st.warning("Ce modèle de livre ne contient aucun chapitre.")
-
-# --- Export (à placer en dehors de la boucle des chapitres) ---
-st.sidebar.markdown("---")
-st.sidebar.header("Exporter votre livre")
-# Placeholder pour le bouton d'export
-st.sidebar.button("Exporter le livre complet (.md)", disabled=True) # Désactivé pour l'instant
+    # Suppression du bloc else problématique
+    # else:
+    #     st.warning("Ce modèle de livre ne contient aucun chapitre.")
 
 # --- Nettoyage/Footer ---
 # (Peut contenir des infos de version, liens, etc.)
