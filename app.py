@@ -7,10 +7,6 @@ import datetime
 import re
 import numpy as np
 import tempfile
-import soundfile as sf
-from pathlib import Path
-import openai
-import base64
 import io
 
 # --- Initialisation des variables de session ---
