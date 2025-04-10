@@ -12,6 +12,7 @@ import tempfile
 import io
 
 # --- Configuration de la page (DOIT ÊTRE LA PREMIÈRE COMMANDE STREAMLIT) ---
+# Mise à jour : correction des problèmes d'interface de fonction pour un déploiement stable
 st.set_page_config(
     page_title="MemorIA - Votre atelier d'écriture personnel",
     page_icon="📝",
