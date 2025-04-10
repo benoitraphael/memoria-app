@@ -11,6 +11,8 @@ import numpy as np
 import tempfile
 import io
 
+print("=== DÉMARRAGE DE L'APPLICATION ===")
+
 # --- Configuration de la page (DOIT ÊTRE LA PREMIÈRE COMMANDE STREAMLIT) ---
 st.set_page_config(
     page_title="MemorIA - Votre atelier d'écriture personnel",
@@ -18,7 +20,10 @@ st.set_page_config(
     layout="wide"
 )
 
+print("=== CONFIGURATION DE PAGE OK ===")
+
 # --- Initialisation des variables de session ---
+print("=== INITIALISATION DES VARIABLES DE SESSION ===")
 if "selected_template_name" not in st.session_state:
     st.session_state.selected_template_name = None
 if "chapters" not in st.session_state:
@@ -35,7 +40,10 @@ if 'active_expander' not in st.session_state:
 if 'chapter_messages' not in st.session_state:
     st.session_state.chapter_messages = {}
 
+print("=== VARIABLES DE SESSION INITIALISÉES ===")
+
 # --- Affichage du message utilisateur global (si existant) ---
+print("=== AFFICHAGE DU MESSAGE UTILISATEUR GLOBAL ===")
 if st.session_state.user_message:
     msg_type = st.session_state.user_message["type"]
     msg_text = st.session_state.user_message["text"]
@@ -50,7 +58,10 @@ if st.session_state.user_message:
     # Effacer le message pour qu'il ne s'affiche qu'une fois
     st.session_state.user_message = None
 
+print("=== MESSAGE UTILISATEUR GLOBAL AFFICHÉ ===")
+
 # --- Fonctions d'utilitaires ---
+print("=== FONCTIONS D'UTILITAIRES ===")
 def normalize_name(name):
     """Normaliser un nom pour l'utiliser comme identifiant"""
     return re.sub(r'[^a-z0-9]', '_', name.lower())
@@ -404,7 +415,7 @@ def simple_audio_recorder(chapter_name, text_key):
                 #     key=f"transcribed_display_{normalize_name(chapter_name)}"
                 # )
 
-                # if st.button("💾 Enregistrer le Souvenir (audio)", key=f"save_audio_{normalize_name(chapter_name)}"):
+                # if st.button("", key=f"save_audio_{normalize_name(chapter_name)}"):
                 #     if transcribed_text.strip():
                 #         try:
                 #             # Lire le texte potentiellement édité
@@ -588,7 +599,7 @@ def simple_audio_recorder(chapter_name, text_key):
                 #     key=f"transcribed_display_{normalize_name(chapter_name)}"
                 # )
 
-                # if st.button("💾 Enregistrer le Souvenir (audio)", key=f"save_audio_{normalize_name(chapter_name)}"):
+                # if st.button("", key=f"save_audio_{normalize_name(chapter_name)}"):
                 #     if transcribed_text.strip():
                 #         try:
                 #             # Lire le texte potentiellement édité
@@ -606,7 +617,7 @@ def simple_audio_recorder(chapter_name, text_key):
 
             # Suppression de l'ancienne section 'souvenir rapide'
             # temp_memory_text = st.text_area("Écrire un souvenir rapide :", key=f"temp_text_{normalize_name(chapter_name)}")
-            # if st.button(f"💾 Sauvegarder souvenir rapide pour '{chapter_name}'", key=f"save_temp_{normalize_name(chapter_name)}"):
+            # if st.button(f" Sauvegarder souvenir rapide pour '{chapter_name}'", key=f"save_temp_{normalize_name(chapter_name)}"):
             #     if temp_memory_text.strip():
             #         # Utilisation de la fonction save_memory mise à jour
             #         success, message, file_path = save_memory(st.session_state.selected_template_name, chapter_name, temp_memory_text)
@@ -681,13 +692,11 @@ def simple_audio_recorder(chapter_name, text_key):
                 else:
                      st.warning("Ajoutez au moins un souvenir avant de générer.")
                      st.session_state.active_expander = f"expander_{normalize_name(chapter_name)}"
-                     st.rerun() # Optionnel: forcer le rerun pour ouvrir l'expander si on clique générer sans souvenirs
 
             elif not memories:
                 # Si aucun souvenir, on ne fait rien mais on reste sur le même expander
                 st.caption("Ajoutez des souvenirs pour pouvoir générer ce chapitre.") # Remettre le caption
                 st.session_state.active_expander = f"expander_{normalize_name(chapter_name)}"
-                st.rerun() # Optionnel: forcer le rerun pour ouvrir l'expander si on clique générer sans souvenirs
 
             # Afficher le chapitre généré (s'il existe dans l'état de session ou fichier)
             display_content = st.session_state.generated_chapters.get(normalize_name(chapter_name), generated_content)
@@ -828,7 +837,7 @@ def load_chapter(template_name, chapter):
 # --- Interface Utilisateur Streamlit ---
 # st.set_page_config(   <-- Supprimer l'ancien appel ici
 #     page_title="MemorIA - Votre atelier d'écriture personnel",
-#     page_icon="📝",
+#     page_icon="",
 #     layout="wide"
 # )
 
@@ -880,7 +889,7 @@ with st.sidebar:
         else:
             st.error("Aucun modèle trouvé !")
     else:
-        st.warning("Veuillez entrer votre clé API OpenAI pour choisir un modèle.")
+        st.warning("⚠️ Veuillez entrer votre clé API OpenAI pour choisir un modèle.")
 
     st.markdown("---")
     st.title("À propos")
@@ -891,8 +900,9 @@ st.title("MemorIA - Votre atelier d'écriture personnel")
 st.markdown("Racontez vos souvenirs, l'IA rédige votre histoire.")
 
 # --- Vérification initiale --- 
+print("=== VÉRIFICATION INITIALE ===")
 if not st.session_state.get("api_key"):
-    st.warning("Veuillez entrer votre clé API OpenAI dans la barre latérale pour commencer.")
+    st.warning("⚠️ Veuillez entrer votre clé API OpenAI dans la barre latérale pour commencer.")
     st.stop() # Arrêter l'exécution si pas de clé API
 
 if not st.session_state.get("selected_template_name"):
@@ -1097,7 +1107,7 @@ if st.session_state.chapters:
                 #     key=f"transcribed_display_{normalize_name(chapter)}"
                 # )
 
-                # if st.button("💾 Enregistrer le Souvenir (audio)", key=f"save_audio_{normalize_name(chapter)}"):
+                # if st.button("", key=f"save_audio_{normalize_name(chapter)}"):
                 #     if transcribed_text.strip():
                 #         try:
                 #             # Lire le texte potentiellement édité
@@ -1115,7 +1125,7 @@ if st.session_state.chapters:
 
             # Suppression de l'ancienne section 'souvenir rapide'
             # temp_memory_text = st.text_area("Écrire un souvenir rapide :", key=f"temp_text_{normalize_name(chapter)}")
-            # if st.button(f"💾 Sauvegarder souvenir rapide pour '{chapter}'", key=f"save_temp_{normalize_name(chapter)}"):
+            # if st.button(f" Sauvegarder souvenir rapide pour '{chapter}'", key=f"save_temp_{normalize_name(chapter)}"):
             #     if temp_memory_text.strip():
             #         # Utilisation de la fonction save_memory mise à jour
             #         success, message, file_path = save_memory(st.session_state.selected_template_name, chapter, temp_memory_text)
@@ -1188,15 +1198,13 @@ if st.session_state.chapters:
                             st.session_state.active_expander = expander_key
                             st.rerun() # Recharger pour afficher l'erreur
                 else:
-                     st.warning("Ajoutez au moins un souvenir avant de générer.")
-                     if st.session_state.get('active_expander') != expander_key:
-                          st.session_state.active_expander = expander_key
+                     st.warning("⚠️ Ajoutez au moins un souvenir avant de générer.")
+                     st.session_state.active_expander = expander_key
 
             elif not memories:
                 # Si aucun souvenir, on ne fait rien mais on reste sur le même expander
-                st.caption("Ajoutez des souvenirs pour pouvoir générer ce chapitre.") # Remettre le caption
-                if st.session_state.get('active_expander') != expander_key:
-                     st.session_state.active_expander = expander_key
+                st.caption("⚠️ Ajoutez des souvenirs pour pouvoir générer ce chapitre.") # Remettre le caption
+                st.session_state.active_expander = expander_key
 
             # Afficher le chapitre généré (s'il existe dans l'état de session ou fichier)
             display_content = st.session_state.generated_chapters.get(normalize_name(chapter), generated_content)
