@@ -55,6 +55,10 @@ def normalize_name(name):
     """Normaliser un nom pour l'utiliser comme identifiant"""
     return re.sub(r'[^a-z0-9]', '_', name.lower())
 
+def update_text_content(widget_session_key, content_session_key):
+    """Met à jour la variable de session contenant le texte lorsque l'utilisateur tape."""
+    st.session_state[content_session_key] = st.session_state[widget_session_key]
+
 def load_templates():
     """Charger les templates de livre disponibles"""
     template_dir = os.path.join(os.getcwd(), "templates")
@@ -172,9 +176,10 @@ def save_chapter(template_name, chapter_name, content):
     try:
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
-        return True, file_path
+        return True, f"Chapitre '{chapter_name}' sauvegardé avec succès", file_path
     except Exception as e:
-        return False, f"Erreur lors de l'enregistrement du chapitre: {str(e)}"
+        error_msg = f"Erreur lors de l'enregistrement du chapitre: {str(e)}"
+        return False, error_msg, None
 
 def load_generated_chapters():
     """Charger tous les chapitres générés pour le template actuel"""
@@ -297,7 +302,7 @@ Utilise exclusivement les informations fournies dans les souvenirs, sans invente
         generated_content = response.choices[0].message.content
         
         # Sauvegarder le chapitre
-        success, _ = save_chapter(template_name, chapter_name, generated_content)
+        success, _, _ = save_chapter(template_name, chapter_name, generated_content)
         
         if success:
             return generated_content, True
@@ -480,10 +485,6 @@ def simple_audio_recorder(chapter_name, text_key):
                 if content_key not in st.session_state:
                     st.session_state[content_key] = ""
 
-                def update_text_content(widget_session_key, content_session_key):
-                    """Met à jour la variable de session contenant le texte lorsque l'utilisateur tape."""
-                    st.session_state[content_session_key] = st.session_state[widget_session_key]
-
                 st.text_area(
                     "Racontez votre souvenir ici :",
                     height=150,
@@ -641,7 +642,7 @@ def simple_audio_recorder(chapter_name, text_key):
                 if memories:
                     with st.spinner("🧠 L'IA réfléchit et rédige..."): 
                         # Appel réel à la fonction de génération
-                        generated_text = generate_chapter_with_ai(
+                        generated_text, success = generate_chapter_with_ai(
                             st.session_state.api_key, 
                             st.session_state.selected_template_name, 
                             chapter_name, 
@@ -649,9 +650,9 @@ def simple_audio_recorder(chapter_name, text_key):
                         )
                         
                         # Vérifier si la génération a réussi
-                        if generated_text and not generated_text.startswith("Erreur"):
+                        if success and generated_text:
                             # Sauvegarder le chapitre généré
-                            save_success, save_message, _ = save_chapter(
+                            save_success, save_message, save_path = save_chapter(
                                 st.session_state.selected_template_name, 
                                 chapter_name, 
                                 generated_text
@@ -697,138 +698,25 @@ def simple_audio_recorder(chapter_name, text_key):
 # --- Export (à placer en dehors de la boucle des chapitres) ---
 st.sidebar.markdown("---")
 st.sidebar.header("Exporter votre livre")
-# Placeholder pour le bouton d'export
-st.sidebar.button("Exporter le livre complet (.md)", key="export_book_button", disabled=True) # Désactivé pour l'instant
 
-# --- Nettoyage/Footer ---
-# (Peut contenir des infos de version, liens, etc.)
-
-# --- Fonctions pour la génération de chapitre avec IA --- 
-
-def save_chapter(template_name, chapter, content):
-    """Sauvegarde le contenu généré d'un chapitre dans le dossier /chapitres."""
-    try:
-        base_dir = Path("chapitres")
-        template_dir = base_dir / normalize_name(template_name)
-        template_dir.mkdir(parents=True, exist_ok=True)
-        
-        filename = normalize_name(chapter) + ".md"
-        file_path = template_dir / filename
-        
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        return True, f"Chapitre '{chapter}' sauvegardé avec succès.", str(file_path)
-    except Exception as e:
-        error_msg = f"Erreur lors de la sauvegarde du chapitre {chapter}: {str(e)}"
-        st.error(error_msg)
-        return False, error_msg, None
-
-def generate_chapter_with_ai(api_key, template_title, chapter_title, memories):
-    """Génère un chapitre en utilisant OpenAI GPT-4o basé sur les souvenirs fournis."""
-    if not memories:
-        return "Erreur : Aucun souvenir fourni pour générer ce chapitre."
+if st.session_state.selected_template_name and st.session_state.generated_chapters:
+    ordered_chapters = st.session_state.chapters.copy()  # Pour respecter l'ordre des chapitres
     
-    if not api_key:
-         return "Erreur : Clé API OpenAI non configurée."
-
-    try:
-        client = openai.OpenAI(api_key=api_key)
-        
-        # Concaténer les souvenirs
-        concatenated_memories = "\n\n---\n\n".join([m['content'] for m in memories])
-        
-        # Prompt Chain-of-Thought (CoT) pour la génération littéraire
-        prompt = f"""
-        Vous êtes un écrivain talentueux, spécialisé dans l'écriture autobiographique avec une touche littéraire, 
-        un peu dans le style de Montaigne ou David Sedaris : introspectif, avec des digressions possibles, 
-        parfois de l'autodérision, mais toujours sincère et personnel.
-        
-        Votre tâche est de rédiger un chapitre intitulé "{chapter_title}" pour une autobiographie intitulée "{template_title}". 
-        Ce chapitre doit être basé **uniquement** sur les souvenirs bruts suivants, fournis par l'auteur :
-        
-        --- SOUVENIRS BRUTS ---
-        {concatenated_memories}
-        --- FIN DES SOUVENIRS BRUTS ---
-        
-        **Instructions précises:**
-        1.  **Synthétisez** ces souvenirs en un récit cohérent et fluide pour le chapitre "{chapter_title}".
-        2.  **Adoptez un style littéraire personnel**, comme décrit plus haut. N'hésitez pas à lier les souvenirs, à ajouter des réflexions ou des transitions qui semblent naturelles.
-        3.  **Restez fidèle à l'esprit et aux faits** des souvenirs fournis. N'inventez pas d'événements majeurs non mentionnés.
-        4.  **Structurez le texte** comme un chapitre de livre (paragraphes, etc.).
-        5.  **TRÈS IMPORTANT :** Votre réponse finale doit contenir UNIQUEMENT le texte du chapitre rédigé, et ce texte doit être encadré par les balises XML `<chapitrefinal>` et `</chapitrefinal>`. N'ajoutez AUCUN texte avant ou après ces balises. 
-            Exemple : `<chapitrefinal>Le texte complet de mon chapitre commence ici... et se termine ici.</chapitrefinal>`
-        
-        **Réfléchissez étape par étape (Chain of Thought) avant de générer le texte final (vous ne montrerez pas ces étapes dans la réponse finale):**
-        a.  Relire attentivement tous les souvenirs.
-        b.  Identifier les thèmes principaux, les émotions, le ton général.
-        c.  Esquisser une structure narrative pour le chapitre.
-        d.  Choisir quelques points clés ou anecdotes à développer.
-        e.  Penser aux transitions et aux réflexions possibles.
-        f.  Rédiger le chapitre en respectant le style demandé.
-        g.  Vérifier que le texte final est bien entre les balises `<chapitrefinal>` et `</chapitrefinal>`.
-        
-        Maintenant, rédigez le chapitre.
-        """
-        
-        st.info(f"Envoi de {len(memories)} souvenirs à GPT-4o pour le chapitre '{chapter_title}'...")
-        
-        completion = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "Vous êtes un assistant d'écriture autobiographique."}, 
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7, # Un peu de créativité
-            max_tokens=2048 # Limite pour la longueur du chapitre
-        )
-        
-        raw_response = completion.choices[0].message.content
-        st.success("Réponse reçue d'OpenAI.")
-
-        # Extraction du contenu entre les balises
-        match = re.search(r'<chapitrefinal>(.*?)</chapitrefinal>', raw_response, re.DOTALL | re.IGNORECASE)
-        if match:
-            extracted_content = match.group(1).strip()
-            # Nettoyage simple (peut être amélioré)
-            extracted_content = extracted_content.replace('\n', '\n') # S'assurer que les sauts de ligne sont corrects
-            return extracted_content
-        else:
-            st.warning("Les balises <chapitrefinal> n'ont pas été trouvées dans la réponse de l'IA. Retour du contenu brut.")
-            return raw_response # Retourner la réponse brute si les balises manquent
-
-    except openai.AuthenticationError:
-         st.error("Erreur d'authentification OpenAI. Vérifiez votre clé API.")
-         return "Erreur : Clé API OpenAI invalide ou manquante."
-    except openai.RateLimitError:
-        st.error("Erreur OpenAI : Vous avez dépassé votre quota ou la limite de fréquence. Veuillez réessayer plus tard.")
-        return "Erreur : Limite de taux OpenAI atteinte."
-    except Exception as e:
-        error_msg = f"Erreur inattendue lors de l'appel à OpenAI : {str(e)}"
-        st.error(error_msg)
-        return f"Erreur inattendue : {str(e)}"
-
-
-def load_chapter(template_name, chapter):
-    """Charger un chapitre généré s'il existe"""
-    chapter_file = os.path.join(os.getcwd(), "chapitres", normalize_name(template_name), f"{normalize_name(chapter)}.md")
-    
-    if not os.path.exists(chapter_file):
-        return None
-        
-    try:
-        with open(chapter_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-        return content
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du chapitre: {str(e)}")
-        return None
+    if st.sidebar.button("📚 Compiler en un seul document"):
+        with st.spinner("Compilation en cours..."):
+            compiled_text, book_filename = compile_book(st.session_state.selected_template_name, ordered_chapters)
+            st.session_state.user_message = {"type": "success", "text": "Livre compilé avec succès !"}
+            st.download_button(
+                label="📥 Télécharger le livre complet",
+                data=compiled_text,
+                file_name=book_filename,
+                mime="text/markdown"
+            )
+            st.rerun()
 
 # --- Interface Utilisateur Streamlit ---
-# st.set_page_config(   <-- Supprimer l'ancien appel ici
-#     page_title="MemorIA - Votre atelier d'écriture personnel",
-#     page_icon="",
-#     layout="wide"
-# )
+st.title("MemorIA 📝")
+st.markdown("Racontez vos souvenirs, l'IA rédige votre histoire.")
 
 # --- Barre latérale ---
 with st.sidebar:
@@ -883,10 +771,6 @@ with st.sidebar:
     st.markdown("---")
     st.title("À propos")
     st.markdown("MemorIA transforme vos souvenirs bruts en chapitres de vie rédigés par l'IA.")
-
-# Titre principal
-st.title("MemorIA - Votre atelier d'écriture personnel")
-st.markdown("Racontez vos souvenirs, l'IA rédige votre histoire.")
 
 # --- Vérification initiale --- 
 if not st.session_state.get("api_key"):
@@ -986,10 +870,6 @@ if st.session_state.chapters:
 
                 if content_key not in st.session_state:
                     st.session_state[content_key] = ""
-
-                def update_text_content(widget_session_key, content_session_key):
-                    """Met à jour la variable de session contenant le texte lorsque l'utilisateur tape."""
-                    st.session_state[content_session_key] = st.session_state[widget_session_key]
 
                 st.text_area(
                     "Racontez votre souvenir ici :",
@@ -1148,7 +1028,7 @@ if st.session_state.chapters:
                 if memories:
                     with st.spinner("🧠 L'IA réfléchit et rédige..."): 
                         # Appel réel à la fonction de génération
-                        generated_text = generate_chapter_with_ai(
+                        generated_text, success = generate_chapter_with_ai(
                             st.session_state.api_key, 
                             st.session_state.selected_template_name, 
                             chapter, 
@@ -1156,9 +1036,9 @@ if st.session_state.chapters:
                         )
                         
                         # Vérifier si la génération a réussi
-                        if generated_text and not generated_text.startswith("Erreur"):
+                        if success and generated_text:
                             # Sauvegarder le chapitre généré
-                            save_success, save_message, _ = save_chapter(
+                            save_success, save_message, save_path = save_chapter(
                                 st.session_state.selected_template_name, 
                                 chapter, 
                                 generated_text
