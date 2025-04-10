@@ -13,47 +13,58 @@ import io
 import sys
 import gc  # Garbage Collector pour libérer de la mémoire
 
-# --- Ajout de logs explicites pour déboguer le démarrage sur Render ---
-print("Démarrage de l'application MemorIA...")
+# --- Logs de Démarrage Très Spécifiques ---
+print("--- Script app.py démarré ---")
 print(f"Répertoire de travail : {os.getcwd()}")
 print(f"Version Python : {sys.version}")
-print(f"Version Streamlit : {st.__version__}")
+# Essayer d'importer et afficher la version de streamlit
+try:
+    print(f"Version Streamlit : {st.__version__}")
+except AttributeError:
+    print("Impossible de récupérer la version de Streamlit (__version__ non trouvé)")
 
 try:
-    # --- Configuration de la page (DOIT ÊTRE LA PREMIÈRE COMMANDE STREAMLIT) ---
-    # Mise à jour : optimisation des performances et correction des fuites de mémoire
-    print("Configuration de la page Streamlit...")
+    # --- Configuration de la page --- 
+    # DOIT ÊTRE LA PREMIÈRE COMMANDE STREAMLIT
+    print("--- AVANT st.set_page_config ---")
     st.set_page_config(
         page_title="MemorIA - Votre atelier d'écriture personnel",
         page_icon="📝",
         layout="wide"
     )
-    print("Configuration de la page terminée.")
+    print("--- APRÈS st.set_page_config ---")
 
     # --- Initialisation des variables de session ---
-    print("Initialisation des variables de session...")
+    print("--- AVANT initialisation st.session_state ---")
     if "selected_template_name" not in st.session_state:
         st.session_state.selected_template_name = None
+        print("Initialisé: selected_template_name")
     if "chapters" not in st.session_state:
         st.session_state.chapters = []
+        print("Initialisé: chapters")
     if "api_key" not in st.session_state:
         st.session_state.api_key = ""
+        print("Initialisé: api_key")
     if "generated_chapters" not in st.session_state:
         st.session_state.generated_chapters = {}
+        print("Initialisé: generated_chapters")
     if "user_message" not in st.session_state:
         st.session_state.user_message = None
+        print("Initialisé: user_message")
     if 'active_expander' not in st.session_state:
         st.session_state.active_expander = None
-    # Ajout d'un dictionnaire pour stocker les messages par chapitre
+        print("Initialisé: active_expander")
     if 'chapter_messages' not in st.session_state:
         st.session_state.chapter_messages = {}
-    print("Initialisation des variables de session terminée.")
+        print("Initialisé: chapter_messages")
+    print("--- APRÈS initialisation st.session_state ---")
 
-    # Forcer le nettoyage de la mémoire inutilisée
+    # Appel gc.collect() ici, après les premières opérations Streamlit
+    print("--- Appel gc.collect() --- ")
     gc.collect()
 
     # --- Affichage du message utilisateur global (si existant) ---
-    print("Traitement des messages utilisateur...")
+    print("--- AVANT affichage message utilisateur ---")
     if st.session_state.user_message:
         msg_type = st.session_state.user_message["type"]
         msg_text = st.session_state.user_message["text"]
@@ -67,18 +78,23 @@ try:
             st.info(msg_text)
         # Effacer le message pour qu'il ne s'affiche qu'une fois
         st.session_state.user_message = None
-    print("Traitement des messages utilisateur terminé.")
-except Exception as e:
-    print(f"ERREUR CRITIQUE LORS DE L'INITIALISATION: {str(e)}")
-    # Afficher l'erreur dans Streamlit si possible
-    try:
-        st.error(f"Une erreur critique s'est produite lors du démarrage: {str(e)}")
-    except:
-        pass
+    print("--- APRÈS affichage message utilisateur ---")
+    print("--- Fin du bloc d'initialisation principal ---")
 
-# --- Fonctions d'utilitaires ---
+except Exception as e:
+    print(f"!!! ERREUR CRITIQUE PENDANT L'INITIALISATION : {str(e)} !!!")
+    # Essayer d'afficher l'erreur dans Streamlit si possible
+    try:
+        st.error(f"Une erreur critique s'est produite lors du démarrage : {str(e)}")
+    except Exception as inner_e:
+        print(f"!!! Impossible d'afficher l'erreur dans Streamlit : {inner_e} !!!")
+
+# --- La suite du code (fonctions, interface principale...) ---
+print("--- Début de la définition des fonctions --- ")
+
+# --- Fonctions Utilitaires ---
 def normalize_name(name):
-    """Normaliser un nom pour l'utiliser comme identifiant"""
+    """Normaliser les noms de fichiers/dossiers pour éviter les caractères invalides"""
     return re.sub(r'[^a-z0-9]', '_', name.lower())
 
 def update_text_content(widget_session_key, content_session_key):
