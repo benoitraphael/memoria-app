@@ -10,46 +10,71 @@ from pathlib import Path
 import numpy as np
 import tempfile
 import io
+import sys
+import gc  # Garbage Collector pour libérer de la mémoire
 
-# --- Configuration de la page (DOIT ÊTRE LA PREMIÈRE COMMANDE STREAMLIT) ---
-# Mise à jour : correction des problèmes d'interface de fonction pour un déploiement stable
-st.set_page_config(
-    page_title="MemorIA - Votre atelier d'écriture personnel",
-    page_icon="📝",
-    layout="wide"
-)
+# --- Ajout de logs explicites pour déboguer le démarrage sur Render ---
+print("Démarrage de l'application MemorIA...")
+print(f"Répertoire de travail : {os.getcwd()}")
+print(f"Version Python : {sys.version}")
+print(f"Version Streamlit : {st.__version__}")
 
-# --- Initialisation des variables de session ---
-if "selected_template_name" not in st.session_state:
-    st.session_state.selected_template_name = None
-if "chapters" not in st.session_state:
-    st.session_state.chapters = []
-if "api_key" not in st.session_state:
-    st.session_state.api_key = ""
-if "generated_chapters" not in st.session_state:
-    st.session_state.generated_chapters = {}
-if "user_message" not in st.session_state:
-    st.session_state.user_message = None
-if 'active_expander' not in st.session_state:
-    st.session_state.active_expander = None
-# Ajout d'un dictionnaire pour stocker les messages par chapitre
-if 'chapter_messages' not in st.session_state:
-    st.session_state.chapter_messages = {}
+try:
+    # --- Configuration de la page (DOIT ÊTRE LA PREMIÈRE COMMANDE STREAMLIT) ---
+    # Mise à jour : optimisation des performances et correction des fuites de mémoire
+    print("Configuration de la page Streamlit...")
+    st.set_page_config(
+        page_title="MemorIA - Votre atelier d'écriture personnel",
+        page_icon="📝",
+        layout="wide"
+    )
+    print("Configuration de la page terminée.")
 
-# --- Affichage du message utilisateur global (si existant) ---
-if st.session_state.user_message:
-    msg_type = st.session_state.user_message["type"]
-    msg_text = st.session_state.user_message["text"]
-    if msg_type == "success":
-        st.success(msg_text)
-    elif msg_type == "error":
-        st.error(msg_text)
-    elif msg_type == "warning":
-        st.warning(msg_text)
-    elif msg_type == "info":
-        st.info(msg_text)
-    # Effacer le message pour qu'il ne s'affiche qu'une fois
-    st.session_state.user_message = None
+    # --- Initialisation des variables de session ---
+    print("Initialisation des variables de session...")
+    if "selected_template_name" not in st.session_state:
+        st.session_state.selected_template_name = None
+    if "chapters" not in st.session_state:
+        st.session_state.chapters = []
+    if "api_key" not in st.session_state:
+        st.session_state.api_key = ""
+    if "generated_chapters" not in st.session_state:
+        st.session_state.generated_chapters = {}
+    if "user_message" not in st.session_state:
+        st.session_state.user_message = None
+    if 'active_expander' not in st.session_state:
+        st.session_state.active_expander = None
+    # Ajout d'un dictionnaire pour stocker les messages par chapitre
+    if 'chapter_messages' not in st.session_state:
+        st.session_state.chapter_messages = {}
+    print("Initialisation des variables de session terminée.")
+
+    # Forcer le nettoyage de la mémoire inutilisée
+    gc.collect()
+
+    # --- Affichage du message utilisateur global (si existant) ---
+    print("Traitement des messages utilisateur...")
+    if st.session_state.user_message:
+        msg_type = st.session_state.user_message["type"]
+        msg_text = st.session_state.user_message["text"]
+        if msg_type == "success":
+            st.success(msg_text)
+        elif msg_type == "error":
+            st.error(msg_text)
+        elif msg_type == "warning":
+            st.warning(msg_text)
+        elif msg_type == "info":
+            st.info(msg_text)
+        # Effacer le message pour qu'il ne s'affiche qu'une fois
+        st.session_state.user_message = None
+    print("Traitement des messages utilisateur terminé.")
+except Exception as e:
+    print(f"ERREUR CRITIQUE LORS DE L'INITIALISATION: {str(e)}")
+    # Afficher l'erreur dans Streamlit si possible
+    try:
+        st.error(f"Une erreur critique s'est produite lors du démarrage: {str(e)}")
+    except:
+        pass
 
 # --- Fonctions d'utilitaires ---
 def normalize_name(name):
@@ -117,6 +142,9 @@ def load_memories(chapter):
                 })
             except Exception as e:
                 st.error(f"Erreur lors du chargement du souvenir {filename}: {str(e)}")
+    
+    # Libérer la mémoire après le chargement (ajout pour optimisation)
+    gc.collect()
     
     return memories
 
@@ -296,11 +324,15 @@ Utilise exclusivement les informations fournies dans les souvenirs, sans invente
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
-            max_tokens=2500
+            max_tokens=16000
         )
         
         # Extraire le texte généré
         generated_content = response.choices[0].message.content
+        
+        # Nettoyage de la mémoire explicite (ajout pour optimisation)
+        del response
+        gc.collect()
         
         # Sauvegarder le chapitre
         success, _, _ = save_chapter(template_name, chapter_name, generated_content)
@@ -312,6 +344,7 @@ Utilise exclusivement les informations fournies dans les souvenirs, sans invente
             
     except Exception as e:
         error_msg = f"Erreur lors de la génération du chapitre: {str(e)}"
+        print(error_msg)  # Garder le log d'erreur
         return error_msg, False
 
 # Fonction simplifiée pour l'enregistrement audio
@@ -723,7 +756,7 @@ st.markdown("Racontez vos souvenirs, l'IA rédige votre histoire.")
 with st.sidebar:
     st.title("Configuration")
     st.markdown("Paramétrez votre expérience MemorIA.")
-
+    
     # Saisie de la clé API OpenAI
     api_key = st.text_input(
         "Clé API OpenAI",
