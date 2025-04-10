@@ -11,8 +11,6 @@ import numpy as np
 import tempfile
 import io
 
-print("=== DÉMARRAGE DE L'APPLICATION ===")
-
 # --- Configuration de la page (DOIT ÊTRE LA PREMIÈRE COMMANDE STREAMLIT) ---
 st.set_page_config(
     page_title="MemorIA - Votre atelier d'écriture personnel",
@@ -20,10 +18,7 @@ st.set_page_config(
     layout="wide"
 )
 
-print("=== CONFIGURATION DE PAGE OK ===")
-
 # --- Initialisation des variables de session ---
-print("=== INITIALISATION DES VARIABLES DE SESSION ===")
 if "selected_template_name" not in st.session_state:
     st.session_state.selected_template_name = None
 if "chapters" not in st.session_state:
@@ -40,10 +35,7 @@ if 'active_expander' not in st.session_state:
 if 'chapter_messages' not in st.session_state:
     st.session_state.chapter_messages = {}
 
-print("=== VARIABLES DE SESSION INITIALISÉES ===")
-
 # --- Affichage du message utilisateur global (si existant) ---
-print("=== AFFICHAGE DU MESSAGE UTILISATEUR GLOBAL ===")
 if st.session_state.user_message:
     msg_type = st.session_state.user_message["type"]
     msg_text = st.session_state.user_message["text"]
@@ -58,10 +50,7 @@ if st.session_state.user_message:
     # Effacer le message pour qu'il ne s'affiche qu'une fois
     st.session_state.user_message = None
 
-print("=== MESSAGE UTILISATEUR GLOBAL AFFICHÉ ===")
-
 # --- Fonctions d'utilitaires ---
-print("=== FONCTIONS D'UTILITAIRES ===")
 def normalize_name(name):
     """Normaliser un nom pour l'utiliser comme identifiant"""
     return re.sub(r'[^a-z0-9]', '_', name.lower())
@@ -690,12 +679,12 @@ def simple_audio_recorder(chapter_name, text_key):
                             st.session_state.active_expander = f"expander_{normalize_name(chapter_name)}"
                             st.rerun() # Recharger pour afficher l'erreur
                 else:
-                     st.warning("Ajoutez au moins un souvenir avant de générer.")
+                     st.warning("⚠️ Ajoutez au moins un souvenir avant de générer.")
                      st.session_state.active_expander = f"expander_{normalize_name(chapter_name)}"
 
             elif not memories:
                 # Si aucun souvenir, on ne fait rien mais on reste sur le même expander
-                st.caption("Ajoutez des souvenirs pour pouvoir générer ce chapitre.") # Remettre le caption
+                st.caption("⚠️ Ajoutez des souvenirs pour pouvoir générer ce chapitre.") # Remettre le caption
                 st.session_state.active_expander = f"expander_{normalize_name(chapter_name)}"
 
             # Afficher le chapitre généré (s'il existe dans l'état de session ou fichier)
@@ -900,7 +889,6 @@ st.title("MemorIA - Votre atelier d'écriture personnel")
 st.markdown("Racontez vos souvenirs, l'IA rédige votre histoire.")
 
 # --- Vérification initiale --- 
-print("=== VÉRIFICATION INITIALE ===")
 if not st.session_state.get("api_key"):
     st.warning("⚠️ Veuillez entrer votre clé API OpenAI dans la barre latérale pour commencer.")
     st.stop() # Arrêter l'exécution si pas de clé API
